@@ -24,8 +24,8 @@ field_data <- field_data %>%
   filter(parti_name!="sp009") %>% 
   filter(parti_name!="rp094")
 
-
-#individual network stats calculation####
+#network stats and clustering####
+##individual network stats calculation####
 
 network_stats<-data.frame(parti_name=character(),
                           degree=numeric(),
@@ -57,6 +57,8 @@ for (county in c("siaya","vihiga", "rongo", "oyugis")) {
   
   network_stats <- rbind(network_stats, county_network_stats)
 }
+
+#three participants are are not connected to anyone, below is to include them
 network_stats <- rbind(network_stats,
                        field_data %>% 
                          select(parti_name, person_1, person_2, person_3, person_4) %>% 
@@ -95,10 +97,11 @@ network_stats_4<-network_stats %>%
   filter(parti_name%in%field_data$person_4) %>% 
   rename(person_4=parti_name,
          degree_4=2, in_degree_4=3, out_degree_4=4, betweenness_4=5, eigen_4=6)
-#collation of network stats and main df####
+###collation of individual network stats and main df####
 expanded_data<-merge(merge(merge(merge(merge(field_data, network_stats_parti, all.x = T),network_stats_1, all.x = T),network_stats_2, all.x = T), network_stats_3, all.x = T), network_stats_4, all.x = T)
 
-#clustering####
+##clustering####
+#assigning cluster
 cluster <- data.frame(name=character(),
                       cluster=character())
 for (county in c("siaya","vihiga", "rongo", "oyugis")) {
@@ -132,9 +135,10 @@ for (county in c("siaya","vihiga", "rongo", "oyugis")) {
     mutate(cluster=paste0(substr(county, 1, 1), cluster))
   cluster <- rbind(cluster, cluster_membership)
 }
+#missing ones, as above, assigned as independent cluster given subsequent number in each county
 cluster <- rbind(cluster,
                  data.frame(name= network_stats %>% filter(parti_name%!in%cluster$name) %>% select(parti_name) %>% rename(name=parti_name),
-                            cluster=c("s17","s18","r13"))
+                            cluster=c("s16","s17","r10"))
 )
 
 cluster_parti<-cluster %>% 
@@ -159,11 +163,18 @@ cluster_4<-cluster %>%
   filter(name%in%field_data$person_4) %>% 
   rename(person_4=name,cluster_4=cluster)
 
-#collation of clusters and main df####
+###collation of clusters and main df####
 expanded_data<-merge(merge(merge(merge(merge(expanded_data, cluster_parti, all.x = T),cluster_1, all.x = T),cluster_2, all.x = T), cluster_3, all.x = T), cluster_4, all.x = T)
 
 expanded_data <- expanded_data %>% 
   mutate(across(c(cluster_parti:cluster_4), as.factor))
+
+
+#other variables####
+##household head gender####
+expanded_data<-expanded_data %>% 
+  mutate(hh_head_gender=case_when(decision_maker==1~parti_gender,
+                                  decision_maker==0~decision_maker_gender))
 
 #creation of social capital variable####
 social_capital<-expanded_data %>% 
@@ -190,10 +201,7 @@ expanded_data %>%
 
 expanded_data<-expanded_data %>% 
   mutate(coop_dummy = ifelse(is.na(price_coop), 0, 1))
-#household head gender####
-expanded_data<-expanded_data %>% 
-  mutate(hh_head_gender=case_when(decision_maker==1~parti_gender,
-                                  decision_maker==0~decision_maker_gender))
+
 #vaccine would be use####
 expanded_data<-expanded_data %>% 
   mutate(vaccine_wouldbe_use=case_when(vaccine_use==1~1,
