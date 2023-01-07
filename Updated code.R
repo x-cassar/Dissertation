@@ -15,14 +15,15 @@ library(writexl)
 library(igraph)
 '%!in%' <- function(x,y)!('%in%'(x,y))
 #data import####
-field_data <- read_csv("field_data.csv") %>% 
-  mutate_if(is.character, as.factor)
+field_data <- read_csv("field_data.csv") 
 
 ##minor clear####
 field_data <- field_data %>% 
   mutate(price_coop=na_if(price_coop, 0)) %>% 
   filter(parti_name!="sp009") %>% 
-  filter(parti_name!="rp094")
+  filter(parti_name!="rp094") %>% 
+  mutate(home_location=ifelse(home_location=="chamakanga welfare group","chamakanga", home_location))%>% 
+  mutate_if(is.character, as.factor)
 
 #network stats and clustering####
 ##individual network stats calculation####
@@ -171,10 +172,48 @@ expanded_data <- expanded_data %>%
 
 
 #other variables####
+##vaccine would be use####
+expanded_data<-expanded_data %>% 
+  mutate(vaccine_wouldbe_use=as.logical(case_when(vaccine_use==1~1,
+                                       vaccine_use==0&vaccine_access==1~0,
+                                       vaccine_use==0&vaccine_access==0&vaccine_noaccess==1~1,
+                                       vaccine_use==0&vaccine_access==0&vaccine_noaccess==0~0)))
 ##household head gender####
 expanded_data<-expanded_data %>% 
   mutate(hh_head_gender=case_when(decision_maker==1~parti_gender,
                                   decision_maker==0~decision_maker_gender))
+
+#clearing variable names and reordering####
+expanded_data<-expanded_data %>% 
+  select(-age_check, -dairy_check) %>% 
+  rename() %>% 
+  select(#people
+         parti_name,
+         person_1:person_4,
+         #tech use
+         vaccine_use, vaccine_wouldbe_use,
+         feed_used,
+         breed_service_ai,
+         #tech knowledge
+         vaccine_aware,
+         aware_feed_benefits, #issue w cooperative [2], g [247],
+         improv_breed, #not awareness of ai per se but of crossbreeding
+         #individual and hh traits
+         hh_head_gender, parti_gender, age,  education, hh_depen, county, village_name, home_location,
+         #economic traits
+         farming_years, farm_size, num_cows, amount_milk,con_personal,
+         sell_coop, sell_market, perc_dairy,price_coop, price_market, 
+         transport_market, market_distance,
+         other_livestock, other_livestock_type,other_livestock_number,
+         second_income_none, second_income_employment:second_income_other_farming,
+         #network measures
+         degree:eigen, cluster_parti,
+         everything()) %>% 
+  rename(feed_use=feed_used,
+         ai_use=breed_service_ai,
+         feed_aware=aware_feed_benefits,
+         crossbreed_aware=improv_breed)
+
 
 #creation of social capital variable####
 social_capital<-expanded_data %>% 
@@ -201,13 +240,6 @@ expanded_data %>%
 
 expanded_data<-expanded_data %>% 
   mutate(coop_dummy = ifelse(is.na(price_coop), 0, 1))
-
-#vaccine would be use####
-expanded_data<-expanded_data %>% 
-  mutate(vaccine_wouldbe_use=case_when(vaccine_use==1~1,
-                                       vaccine_use==0&vaccine_access==1~0,
-                                       vaccine_use==0&vaccine_access==0&vaccine_noaccess==1~1,
-                                       vaccine_use==0&vaccine_access==0&vaccine_noaccess==0~0))
 #received info####
 expanded_data<-merge(expanded_data,
                      expanded_data %>% 
@@ -231,12 +263,3 @@ expanded_data<-expanded_data %>% separate(feed_training_source, c("feed_source_a
   unite("feed_training_source",c(feed_source_a,feed_source_b,feed_source_c), sep = ";", na.rm = T) %>% 
   unite("vaccine_benefits_source",c(vaccine_source_a,vaccine_source_b,vaccine_source_c), sep = ";", na.rm = T)
 
-#making data readable####
-expanded_data %>% 
-  select(-age_check, -dairy_check, ) %>% 
-  rename() %>% 
-
-field_data$feed_used
-
-summary(glm(data = field_data,
-    feed_used~county+hh_depen+farming_years))
