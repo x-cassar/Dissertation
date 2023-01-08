@@ -2,7 +2,6 @@
 library(tidyverse)
 library(janitor)
 library(skimr)
-library(ggplot2)
 library(corrplot) # for correlation plots
 library(scales) # to add scales to plots e.g. percentages
 library(ggforce) # lots of plotting stuff
@@ -214,6 +213,19 @@ expanded_data<-expanded_data %>%
          feed_aware=aware_feed_benefits,
          crossbreed_aware=improv_breed)
 
+expanded_data %>% 
+  select(county,
+    feed_use, feed_aware,
+         vaccine_use, vaccine_wouldbe_use, vaccine_aware,
+         ai_use, crossbreed_aware) %>%
+  group_by(county) %>% 
+  skim()
+
+summary(glm(family = binomial("logit"),
+            data = expanded_data,
+            crossbreed_aware~hh_head_gender+age+education+hh_depen+
+              farming_years+num_cows+con_personal+degree+village_relationship
+            ))
 
 #creation of social capital variable####
 social_capital<-expanded_data %>% 
