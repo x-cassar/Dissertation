@@ -207,6 +207,9 @@ expanded_data<-expanded_data %>%
          second_income_none, second_income_employment:second_income_other_farming,
          #network measures
          degree:eigen, cluster_parti,
+         contains("info_source"),
+         contains("info_recieved"),
+         contains("helpful"),
          everything()) %>% 
   rename(feed_use=feed_used,
          ai_use=breed_service_ai,
