@@ -178,14 +178,9 @@ expanded_data<-expanded_data %>%
                                        vaccine_use==0&vaccine_access==0&vaccine_noaccess==1~1,
                                        vaccine_use==0&vaccine_access==0&vaccine_noaccess==0~0)))
 ##specific feed use####
+rep_str <- c("calliandra resmodium nappier","desmodium nappier","license callander","nappier bracharia desmodium","nappier desmodium bracharia","nappies,bracharia maize,rhodes","nappier rhodes, desmodium")
 
-rep_str <- c("calliandra resmodium nappier","desmodium nappier","kakamega nappier","license callander","nappier bracharia desmodium","nappier desmodium bracharia","nappier kakamega 1","nappies,bracharia maize,rhodes")
-library(stringi)
-stri_replace_all_regex(pattern=c(" and ",","),
-                       replacement = c(";",";"),
-                       as.character(expanded_data$feed_used_specific))
-
-expanded_data %>% 
+expanded_data<-expanded_data %>% 
   mutate(feed_used_specific=as.character(feed_used_specific)) %>% 
   mutate(feed_used_specific=ifelse(feed_used_specific%in%rep_str, str_replace_all(feed_used_specific, " ",";"), feed_used_specific)) %>% 
   mutate(feed_used_specific=str_remove_all(feed_used_specific,"grass")) %>% 
@@ -195,12 +190,19 @@ expanded_data %>%
          feed_used_specific=str_replace_all(feed_used_specific,",", ";")
          ) %>%
   separate(feed_used_specific, sep =  ";" ,c("feed_1","feed_2","feed_3","feed_4")) %>% 
-  select("feed_1","feed_2","feed_3","feed_4") %>% 
-  mutate(across(c(feed_1:feed_4),
-                ~case_when(str_detect(., "nap")))
-           
-gsub(c(" and ",","),";", expanded_data$feed_used_specific)
-str_replace_all(expanded_data$feed_used_specific, c(" and ",","),c(";",";"))
+  mutate(across(c(feed_1:feed_4),~case_when(str_detect(.,"kaka")~"kakamenga 1 (napier)",
+                                            (str_detect(.,"nappi")|str_detect(.,"napi"))~"napier",
+                                            (str_detect(.,"desmo")|str_detect(.,"modium"))~"desmodium",
+                                            (str_detect(.,"brac")|str_detect(.,"aria"))~"bracchiaria",
+                                            (str_detect(.,"rode")|str_detect(.,"rhode"))~"rhodes grass",
+                                            (str_detect(.,"cali")|str_detect(.,"call"))~"calliandra",
+                                            (str_detect(.,"license")|str_detect(.,"luce")|str_detect(.,"lucian"))~"tree lucerne",
+                                            str_detect(.,"maize")~"maize",
+                                            str_detect(.,"lato")~"mulato",#check what the hell this is - shows up twice?
+                           TRUE~NA_character_))) %>% 
+  unite("specific_feed_used", feed_1:feed_4, na.rm = T,sep = ";") %>% 
+  mutate(specific_feed_used=na_if(specific_feed_used, "")) 
+
 ##household head gender####
 expanded_data<-expanded_data %>% 
   mutate(hh_head_gender=case_when(decision_maker==1~parti_gender,
@@ -215,7 +217,7 @@ expanded_data<-expanded_data %>%
          person_1:person_4,
          #tech use
          vaccine_use, vaccine_wouldbe_use,
-         feed_used,
+         feed_used, specific_feed_used,
          breed_service_ai,
          #tech knowledge
          vaccine_aware,
