@@ -177,6 +177,30 @@ expanded_data<-expanded_data %>%
                                        vaccine_use==0&vaccine_access==1~0,
                                        vaccine_use==0&vaccine_access==0&vaccine_noaccess==1~1,
                                        vaccine_use==0&vaccine_access==0&vaccine_noaccess==0~0)))
+##specific feed use####
+
+rep_str <- c("calliandra resmodium nappier","desmodium nappier","kakamega nappier","license callander","nappier bracharia desmodium","nappier desmodium bracharia","nappier kakamega 1","nappies,bracharia maize,rhodes")
+library(stringi)
+stri_replace_all_regex(pattern=c(" and ",","),
+                       replacement = c(";",";"),
+                       as.character(expanded_data$feed_used_specific))
+
+expanded_data %>% 
+  mutate(feed_used_specific=as.character(feed_used_specific)) %>% 
+  mutate(feed_used_specific=ifelse(feed_used_specific%in%rep_str, str_replace_all(feed_used_specific, " ",";"), feed_used_specific)) %>% 
+  mutate(feed_used_specific=str_remove_all(feed_used_specific,"grass")) %>% 
+  mutate(feed_used_specific=na_if(feed_used_specific,"helps to increase milk production"),
+         feed_used_specific=na_if(feed_used_specific,"name not known"),
+         feed_used_specific=str_replace_all(feed_used_specific," and ", ";"),
+         feed_used_specific=str_replace_all(feed_used_specific,",", ";")
+         ) %>%
+  separate(feed_used_specific, sep =  ";" ,c("feed_1","feed_2","feed_3","feed_4")) %>% 
+  select("feed_1","feed_2","feed_3","feed_4") %>% 
+  mutate(across(c(feed_1:feed_4),
+                ~case_when(str_detect(., "nap")))
+           
+gsub(c(" and ",","),";", expanded_data$feed_used_specific)
+str_replace_all(expanded_data$feed_used_specific, c(" and ",","),c(";",";"))
 ##household head gender####
 expanded_data<-expanded_data %>% 
   mutate(hh_head_gender=case_when(decision_maker==1~parti_gender,
@@ -197,6 +221,10 @@ expanded_data<-expanded_data %>%
          vaccine_aware,
          aware_feed_benefits, #issue w cooperative [2], g [247],
          improv_breed, #not awareness of ai per se but of crossbreeding
+         #tech recomm
+         vaccine_recomm, 
+         feed_recommend,
+         ai_recommend,
          #individual and hh traits
          hh_head_gender, parti_gender, age,  education, hh_depen, county, village_name, home_location,
          #economic traits
@@ -214,7 +242,8 @@ expanded_data<-expanded_data %>%
   rename(feed_use=feed_used,
          ai_use=breed_service_ai,
          feed_aware=aware_feed_benefits,
-         crossbreed_aware=improv_breed)
+         crossbreed_aware=improv_breed,
+         vaccine_recommend=vaccine_recomm)
 
 expanded_data %>% 
   select(county,
