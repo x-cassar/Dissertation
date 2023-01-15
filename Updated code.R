@@ -208,6 +208,12 @@ expanded_data<-expanded_data %>%
   mutate(hh_head_gender=case_when(decision_maker==1~parti_gender,
                                   decision_maker==0~decision_maker_gender))
 
+##number of info sources####
+expanded_data<-expanded_data %>% 
+  mutate(across(c(info_recieved_coop:info_recieved_newspaper), ~as.numeric(.x))) %>%
+  mutate(count_info_recieved=rowSums(across(c(contains("info_rec"))))) %>% 
+  mutate(across(c(info_recieved_coop:info_recieved_newspaper), ~as.logical(.x)))
+
 #clearing variable names and reordering####
 expanded_data<-expanded_data %>% 
   select(-age_check, -dairy_check) %>% 
@@ -278,286 +284,6 @@ test_edges<-expanded_data %>% select(parti_name, person_1:person_4) %>%
   filter(to%in%test_nodes$label)
 
 visNetwork(test_nodes,test_edges)
-
-network_map <- expanded_data %>% 
-  select("parti_name", 
-         "person_1",
-         "person_2",
-         "person_3",
-         "person_4"
-  )
-
-edge_fun <- function(a){
-  network_map %>% 
-    select(parti_name, a) %>% 
-    rename(nodes = parti_name, edges = a)
-}
-
-for (o in 1:ncol(network_map %>% select(-1))) {
-  edge_cols <- as.data.frame(colnames(network_map %>% select(-1)))
-  nums <- as.data.frame(1:ncol(network_map%>% select(-1)))
-  nam <- paste("edges", as.character(nums$`1:ncol(network_map %>% select(-1))`[o]), sep = "")
-  assign(nam, (edge_fun(edge_cols$`colnames(network_map %>% select(-1))`[o])))
-}
-
-
-edges_final <- mget(ls(pattern="edges")) %>%
-  bind_rows()
-
-edges_final[edges_final=="n/a"|edges_final=="999"|
-              edges_final=="other farmer"]<-NA
-edges_final <- na.omit(edges_final)
-
-
-nodes_1 <- edges_final %>% 
-  select(nodes) 
-nodes_2<- edges_final %>% 
-  select(edges) %>% 
-  rename(nodes = edges)
-
-nodes_final <- rbind(nodes_1, nodes_2)
-nodes_final <- nodes_final %>%  distinct()
-nodes_final[nodes_final=="n/a"|nodes_final=="999"|nodes_final=="9999"]<-NA
-nodes_final <- na.omit(nodes_final)
-
-surveyed <- expanded_data %>% select(1)
-nodes_final <- nodes_final %>% 
-  mutate(type = ifelse
-         (as.character(nodes_final$nodes)%in%as.character(surveyed$parti_name),
-           "surveyed", 
-           ifelse(as.character(nodes_final$nodes)%in%info$groups,
-                  "info_source",
-                  "unsurveyed")))
-
-
-nodes<- nodes_final %>% rowid_to_column("id") %>% 
-  mutate(id = id-1)
-
-edges<- edges_final %>% 
-  left_join(nodes, by=c("nodes"="nodes")) %>% 
-  rename(from=id)
-
-edges <- edges %>% 
-  left_join(nodes, by=c("edges"="nodes")) %>% 
-  rename(to=id) %>% 
-  select(from, to)
-
-nodes <- nodes %>% 
-  rename(group=type)
-
-mentions <-(edges %>%group_by(to) %>% count())
-
-for (p in 1:nrow(nodes)) {
-  nodes$size[p] <- (ifelse((nodes$id[p]%in%mentions$to), 
-                           (as.numeric(mentions$n[which(mentions$to==nodes$id[p])])), 
-                           0.5))
-}
-
-
-nodes <- nodes %>% 
-  mutate(size=size*10) %>% 
-  rename(label=nodes)
-
-nodes$shape <- ifelse(nodes$group=="surveyed", 
-                      "square", 
-                      ifelse(nodes$group=="unsurveyed", 
-                             "triangle", 
-                             "pentagon"))
-
-oyugis_net <- visNetwork(nodes=nodes, edges = edges)
-visSave(oyugis_net, file="oyugis_net.html", background = "white")
-
-field$vaccine_use[is.na(field$vaccine_use)]<-0
-field$vaccine_aware[is.na(field$vaccine_aware)]<-0
-# 
-for (p in 1:nrow(nodes)) {
-  nodes$group[p]<-ifelse(nodes$shape[p]=="pentagon", 
-                         "not applicable",
-                         ifelse(!(nodes$label[p]%in%field$parti_name),
-                                "unknown",
-                                ifelse(as.numeric(field$vaccine_use[which(field$parti_name==nodes$label[p])])==1,
-                                       "vaccinated",
-                                       ifelse(as.numeric(field$vaccine_aware[which(field$parti_name==nodes$label[p])])==1,
-                                              "aware",
-                                              "unaware"))))
-}
-
-# for (p in 1:nrow(nodes)) {
-#   nodes$group[p]<-ifelse(nodes$shape[p]=="pentagon", 
-#                                          "not applicable",
-#     ifelse(!(nodes$label[p]%in%field$parti_name),
-#                          "unknown",
-#                          ifelse(as.numeric(field$feed_used[which(field$parti_name==nodes$label[p])])==1,
-#                                 "improved fodder",
-#                                 ifelse(as.numeric(field$aware_feed_benefits[which(field$parti_name==nodes$label[p])])==1,
-#                                        "aware",
-#                                        "unaware"))))
-# }
-# 
-# for (p in 1:nrow(nodes)) {
-#   nodes$group[p]<-ifelse(nodes$shape[p]=="pentagon", 
-#                                          "not applicable",
-#     ifelse(!(nodes$label[p]%in%field$parti_name),
-#                          "unknown",
-#                          ifelse(as.numeric(field$perc_crossbreed[which(field$parti_name==nodes$label[p])])==1,
-#                                 "improved breed",
-#                                 ifelse(as.numeric(field$improv_breed[which(field$parti_name==nodes$label[p])])==1,
-#                                        "aware",
-#                                        "unaware"))))
-# }
-
-
-visNetwork(nodes=nodes, edges = edges) %>% 
-  visLegend()
-
-nodes_bra <- nodes 
-for (p in 1:nrow(nodes_bra)) {
-  nodes_bra$group[p]<-ifelse(nodes$shape[p]=="pentagon", 
-                             "not applicable",
-                             ifelse(!(nodes_bra$label[p]%in%field$parti_name),
-                                    "unknown",
-                                    ifelse((field$improved_feed_bracchiaria[which(field$parti_name==nodes_bra$label[p])])==1,
-                                           "braccharia",
-                                           "NO bracchiara")))
-}
-visNetwork(nodes=nodes_bra, edges = edges) %>% 
-  visLegend()
-
-nodes_des <- nodes 
-for (p in 1:nrow(nodes_des)) {
-  nodes_des$group[p]<-ifelse(nodes$shape[p]=="pentagon", 
-                             "not applicable",
-                             ifelse(!(nodes_des$label[p]%in%field$parti_name),
-                                    "unknown",
-                                    ifelse((field$improved_feed_desmodium[which(field$parti_name==nodes_des$label[p])])==1,
-                                           "desmodium",
-                                           "NO desmodium")))
-}
-visNetwork(nodes=nodes_des, edges = edges) %>% 
-  visLegend()
-
-
-nodes_rho <- nodes 
-for (p in 1:nrow(nodes_rho)) {
-  nodes_rho$group[p]<-ifelse(nodes$shape[p]=="pentagon", 
-                             "not applicable",
-                             ifelse(!(nodes_rho$label[p]%in%field$parti_name),
-                                    "unknown",
-                                    ifelse((field$improved_feed_rhodes_grass[which(field$parti_name==nodes_rho$label[p])])==1,
-                                           "rhodes grass",
-                                           "NO rhodes grass")))
-}
-visNetwork(nodes=nodes_rho, edges = edges) %>% 
-  visLegend()
-
-nodes_mai <- nodes 
-for (p in 1:nrow(nodes_mai)) {
-  nodes_mai$group[p]<-ifelse(nodes$shape[p]=="pentagon", 
-                             "not applicable",
-                             ifelse(!(nodes_mai$label[p]%in%field$parti_name),
-                                    "unknown",
-                                    ifelse((field$improved_maize[which(field$parti_name==nodes_mai$label[p])])==1,
-                                           "maize",
-                                           "NO maize")))
-}
-visNetwork(nodes=nodes_mai, edges = edges) %>% 
-  visLegend()
-
-
-
-library(igraph)
-g0_nodes<-nodes %>% filter(shape!="pentagon") %>% 
-  select(label)
-g0 <- graph_from_data_frame(d=edges_final %>% filter(edges_final$edges%in%g0_nodes$label), vertices = (g0_nodes))
-plot.igraph(g0)
-
-centrality <- function(a){
-  igdegree<-cbind(as.data.frame((degree(a))),
-                  as.data.frame((degree(a, mode = "in"))),
-                  as.data.frame((degree(a, mode = "out"))))
-  colnames(igdegree)<-c("total", "in", "out")
-  
-  igstrength <- as.data.frame(strength(a))
-  names(igstrength)<-c("strength")
-  
-  igcloseness <- as.data.frame(closeness(a, normalized=TRUE))
-  names(igcloseness)<-c("closeness")
-  
-  igbetweenness <- as.data.frame(betweenness(a))
-  names(igbetweenness)<-c("betweenness")
-  
-  igeigenvector <- as.data.frame(eigen_centrality(a)$vector)
-  names(igeigenvector) <- c("Eigenvector centrality")
-  
-  igpagerank <- as.data.frame(page_rank(a)$vector)
-  names(igpagerank)<-c("page rank")
-  
-  igauthority <- as.data.frame(authority_score(a)$vector)
-  names(igauthority)<-c("authority")
-  
-  print(cbind(g0_nodes$label, igdegree,igstrength, igcloseness,
-              igbetweenness, igeigenvector, igpagerank, igauthority))
-  
-}
-g0_centrality <- centrality(g0)
-
-write_xlsx(g0_centrality,"oyugis centrality.xlsx")
-
-
-net_properties <- function(g){
-  
-  diameter_ <- diameter(g, directed = F, weights = NA)
-  
-  mean_distance_ <- mean_distance(g, directed = F)
-  
-  edge_density_ <- edge_density(g)
-  
-  transitivity_ <- transitivity(g)
-  
-  print(as.data.frame(cbind(diameter_, mean_distance_, edge_density_, transitivity_)))
-  
-}
-g0_properties<- as.data.frame(net_properties(g0))
-
-write_xlsx(g0_properties, "oyugis network properties.xlsx")
-
-ig_nodes <- nodes %>% filter(shape!="pentagon")
-ig_nodes$label <- ifelse(ig_nodes$shape=="square",
-                         ig_nodes$label,
-                         ifelse(ig_nodes$size<11,
-                                NA,
-                                ig_nodes$label))
-
-ig_nodes <- ig_nodes %>% drop_na(label) %>% select(label)
-
-ig_edges<- edges_final %>% filter(edges_final$edges%in%ig_nodes$label)
-
-g1 <- graph_from_data_frame(d=ig_edges, vertices = ig_nodes)
-
-modularity_max <- as.data.frame(matrix(ncol=1, nrow=50))
-for (a in 1:50) {
-  modularity_max$V1[a]<-modularity(cluster_walktrap(g1, steps = a))
-  
-}
-
-c1 = cluster_walktrap(g1, steps = which.max(modularity_max$V1))
-modularity(c1)
-length(c1)
-sizes(c1)
-crossing(c1,g1)
-plot(c1,g1)
-plot_dendrogram(c1)
-group_membership <- as.data.frame(c1$membership) %>% 
-  rename(group='c1$membership')
-
-group_nodes <- nodes %>% filter(nodes$label%in%ig_nodes$label)
-group_nodes$group <- group_membership$group
-group_nodes <- group_nodes[order(group_nodes$group),]
-
-group_edges <- edges %>% filter(edges$to%in%group_nodes$id)
-
-visNetwork(nodes=group_nodes, edges = group_edges) %>% 
-  visLegend()
 
 #qualitative variable cleaning taken from paper 2 file####
 qual <- c("no_feed_use",
@@ -644,6 +370,16 @@ raw_field$hay_benefits_yes_2 <- ifelse(str_detect(raw_field$hay_benefits_yes_2, 
 raw_field$vaccine_no_reason<- ifelse(str_detect(raw_field$no_feed_use_2, ("idea")),
                                      "lack of knowledge",
                                      raw_field$vaccine_no_reason)
+
+field$feed_training_source <- gsub("from ", field$feed_training_source, replacement = "")
+
+field$feed_training_source <- as.factor(ifelse(str_detect(field$feed_training_source,"coop|cooperative|kasbon"), 
+                                               "kasbondo dairy cooperative", 
+                                               ifelse(str_detect(field$feed_training_source,"non"), as.character(field$feed_training_source),
+                                                      ifelse(str_detect(field$feed_training_source,"gov"), "government",
+                                                             as.character(field$feed_training_source)))))
+
+
 #s####
 expanded_data %>% 
   select(county,
