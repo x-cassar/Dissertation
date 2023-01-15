@@ -247,6 +247,404 @@ expanded_data<-expanded_data %>%
          crossbreed_aware=improv_breed,
          vaccine_recommend=vaccine_recomm)
 
+#network mapping####
+library(visNetwork)
+
+test_nodes<-expanded_data %>% select(parti_name, person_1:person_4) %>% 
+  pivot_longer(cols = c(1:5),
+               names_to = "var",
+               values_to = "label") %>% 
+  select(2) %>%
+  filter(str_detect(label,"o")) %>% 
+  group_by(label) %>% 
+  count() %>% 
+  mutate(label=as.character(label)) %>% 
+  #mutate(label=ifelse((str_detect(label,"x")&n=="1"),NA, label)) %>% 
+  select(label) %>% 
+  drop_na(label) %>% 
+  arrange(label) %>%
+  mutate(id=label) %>% 
+  select(id,label) %>% 
+  mutate(color.background=ifelse(str_detect(label,"p"),"tomato","slategray"))
+  
+
+test_edges<-expanded_data %>% select(parti_name, person_1:person_4) %>% 
+  mutate_all(as.character) %>% 
+  pivot_longer(cols = c(2:5),
+               names_to = "var",
+               values_to = "to") %>% 
+  select(-var) %>% 
+  rename("from"=1) %>% 
+  filter(to%in%test_nodes$label)
+
+visNetwork(test_nodes,test_edges)
+
+network_map <- expanded_data %>% 
+  select("parti_name", 
+         "person_1",
+         "person_2",
+         "person_3",
+         "person_4"
+  )
+
+edge_fun <- function(a){
+  network_map %>% 
+    select(parti_name, a) %>% 
+    rename(nodes = parti_name, edges = a)
+}
+
+for (o in 1:ncol(network_map %>% select(-1))) {
+  edge_cols <- as.data.frame(colnames(network_map %>% select(-1)))
+  nums <- as.data.frame(1:ncol(network_map%>% select(-1)))
+  nam <- paste("edges", as.character(nums$`1:ncol(network_map %>% select(-1))`[o]), sep = "")
+  assign(nam, (edge_fun(edge_cols$`colnames(network_map %>% select(-1))`[o])))
+}
+
+
+edges_final <- mget(ls(pattern="edges")) %>%
+  bind_rows()
+
+edges_final[edges_final=="n/a"|edges_final=="999"|
+              edges_final=="other farmer"]<-NA
+edges_final <- na.omit(edges_final)
+
+
+nodes_1 <- edges_final %>% 
+  select(nodes) 
+nodes_2<- edges_final %>% 
+  select(edges) %>% 
+  rename(nodes = edges)
+
+nodes_final <- rbind(nodes_1, nodes_2)
+nodes_final <- nodes_final %>%  distinct()
+nodes_final[nodes_final=="n/a"|nodes_final=="999"|nodes_final=="9999"]<-NA
+nodes_final <- na.omit(nodes_final)
+
+surveyed <- expanded_data %>% select(1)
+nodes_final <- nodes_final %>% 
+  mutate(type = ifelse
+         (as.character(nodes_final$nodes)%in%as.character(surveyed$parti_name),
+           "surveyed", 
+           ifelse(as.character(nodes_final$nodes)%in%info$groups,
+                  "info_source",
+                  "unsurveyed")))
+
+
+nodes<- nodes_final %>% rowid_to_column("id") %>% 
+  mutate(id = id-1)
+
+edges<- edges_final %>% 
+  left_join(nodes, by=c("nodes"="nodes")) %>% 
+  rename(from=id)
+
+edges <- edges %>% 
+  left_join(nodes, by=c("edges"="nodes")) %>% 
+  rename(to=id) %>% 
+  select(from, to)
+
+nodes <- nodes %>% 
+  rename(group=type)
+
+mentions <-(edges %>%group_by(to) %>% count())
+
+for (p in 1:nrow(nodes)) {
+  nodes$size[p] <- (ifelse((nodes$id[p]%in%mentions$to), 
+                           (as.numeric(mentions$n[which(mentions$to==nodes$id[p])])), 
+                           0.5))
+}
+
+
+nodes <- nodes %>% 
+  mutate(size=size*10) %>% 
+  rename(label=nodes)
+
+nodes$shape <- ifelse(nodes$group=="surveyed", 
+                      "square", 
+                      ifelse(nodes$group=="unsurveyed", 
+                             "triangle", 
+                             "pentagon"))
+
+oyugis_net <- visNetwork(nodes=nodes, edges = edges)
+visSave(oyugis_net, file="oyugis_net.html", background = "white")
+
+field$vaccine_use[is.na(field$vaccine_use)]<-0
+field$vaccine_aware[is.na(field$vaccine_aware)]<-0
+# 
+for (p in 1:nrow(nodes)) {
+  nodes$group[p]<-ifelse(nodes$shape[p]=="pentagon", 
+                         "not applicable",
+                         ifelse(!(nodes$label[p]%in%field$parti_name),
+                                "unknown",
+                                ifelse(as.numeric(field$vaccine_use[which(field$parti_name==nodes$label[p])])==1,
+                                       "vaccinated",
+                                       ifelse(as.numeric(field$vaccine_aware[which(field$parti_name==nodes$label[p])])==1,
+                                              "aware",
+                                              "unaware"))))
+}
+
+# for (p in 1:nrow(nodes)) {
+#   nodes$group[p]<-ifelse(nodes$shape[p]=="pentagon", 
+#                                          "not applicable",
+#     ifelse(!(nodes$label[p]%in%field$parti_name),
+#                          "unknown",
+#                          ifelse(as.numeric(field$feed_used[which(field$parti_name==nodes$label[p])])==1,
+#                                 "improved fodder",
+#                                 ifelse(as.numeric(field$aware_feed_benefits[which(field$parti_name==nodes$label[p])])==1,
+#                                        "aware",
+#                                        "unaware"))))
+# }
+# 
+# for (p in 1:nrow(nodes)) {
+#   nodes$group[p]<-ifelse(nodes$shape[p]=="pentagon", 
+#                                          "not applicable",
+#     ifelse(!(nodes$label[p]%in%field$parti_name),
+#                          "unknown",
+#                          ifelse(as.numeric(field$perc_crossbreed[which(field$parti_name==nodes$label[p])])==1,
+#                                 "improved breed",
+#                                 ifelse(as.numeric(field$improv_breed[which(field$parti_name==nodes$label[p])])==1,
+#                                        "aware",
+#                                        "unaware"))))
+# }
+
+
+visNetwork(nodes=nodes, edges = edges) %>% 
+  visLegend()
+
+nodes_bra <- nodes 
+for (p in 1:nrow(nodes_bra)) {
+  nodes_bra$group[p]<-ifelse(nodes$shape[p]=="pentagon", 
+                             "not applicable",
+                             ifelse(!(nodes_bra$label[p]%in%field$parti_name),
+                                    "unknown",
+                                    ifelse((field$improved_feed_bracchiaria[which(field$parti_name==nodes_bra$label[p])])==1,
+                                           "braccharia",
+                                           "NO bracchiara")))
+}
+visNetwork(nodes=nodes_bra, edges = edges) %>% 
+  visLegend()
+
+nodes_des <- nodes 
+for (p in 1:nrow(nodes_des)) {
+  nodes_des$group[p]<-ifelse(nodes$shape[p]=="pentagon", 
+                             "not applicable",
+                             ifelse(!(nodes_des$label[p]%in%field$parti_name),
+                                    "unknown",
+                                    ifelse((field$improved_feed_desmodium[which(field$parti_name==nodes_des$label[p])])==1,
+                                           "desmodium",
+                                           "NO desmodium")))
+}
+visNetwork(nodes=nodes_des, edges = edges) %>% 
+  visLegend()
+
+
+nodes_rho <- nodes 
+for (p in 1:nrow(nodes_rho)) {
+  nodes_rho$group[p]<-ifelse(nodes$shape[p]=="pentagon", 
+                             "not applicable",
+                             ifelse(!(nodes_rho$label[p]%in%field$parti_name),
+                                    "unknown",
+                                    ifelse((field$improved_feed_rhodes_grass[which(field$parti_name==nodes_rho$label[p])])==1,
+                                           "rhodes grass",
+                                           "NO rhodes grass")))
+}
+visNetwork(nodes=nodes_rho, edges = edges) %>% 
+  visLegend()
+
+nodes_mai <- nodes 
+for (p in 1:nrow(nodes_mai)) {
+  nodes_mai$group[p]<-ifelse(nodes$shape[p]=="pentagon", 
+                             "not applicable",
+                             ifelse(!(nodes_mai$label[p]%in%field$parti_name),
+                                    "unknown",
+                                    ifelse((field$improved_maize[which(field$parti_name==nodes_mai$label[p])])==1,
+                                           "maize",
+                                           "NO maize")))
+}
+visNetwork(nodes=nodes_mai, edges = edges) %>% 
+  visLegend()
+
+
+
+library(igraph)
+g0_nodes<-nodes %>% filter(shape!="pentagon") %>% 
+  select(label)
+g0 <- graph_from_data_frame(d=edges_final %>% filter(edges_final$edges%in%g0_nodes$label), vertices = (g0_nodes))
+plot.igraph(g0)
+
+centrality <- function(a){
+  igdegree<-cbind(as.data.frame((degree(a))),
+                  as.data.frame((degree(a, mode = "in"))),
+                  as.data.frame((degree(a, mode = "out"))))
+  colnames(igdegree)<-c("total", "in", "out")
+  
+  igstrength <- as.data.frame(strength(a))
+  names(igstrength)<-c("strength")
+  
+  igcloseness <- as.data.frame(closeness(a, normalized=TRUE))
+  names(igcloseness)<-c("closeness")
+  
+  igbetweenness <- as.data.frame(betweenness(a))
+  names(igbetweenness)<-c("betweenness")
+  
+  igeigenvector <- as.data.frame(eigen_centrality(a)$vector)
+  names(igeigenvector) <- c("Eigenvector centrality")
+  
+  igpagerank <- as.data.frame(page_rank(a)$vector)
+  names(igpagerank)<-c("page rank")
+  
+  igauthority <- as.data.frame(authority_score(a)$vector)
+  names(igauthority)<-c("authority")
+  
+  print(cbind(g0_nodes$label, igdegree,igstrength, igcloseness,
+              igbetweenness, igeigenvector, igpagerank, igauthority))
+  
+}
+g0_centrality <- centrality(g0)
+
+write_xlsx(g0_centrality,"oyugis centrality.xlsx")
+
+
+net_properties <- function(g){
+  
+  diameter_ <- diameter(g, directed = F, weights = NA)
+  
+  mean_distance_ <- mean_distance(g, directed = F)
+  
+  edge_density_ <- edge_density(g)
+  
+  transitivity_ <- transitivity(g)
+  
+  print(as.data.frame(cbind(diameter_, mean_distance_, edge_density_, transitivity_)))
+  
+}
+g0_properties<- as.data.frame(net_properties(g0))
+
+write_xlsx(g0_properties, "oyugis network properties.xlsx")
+
+ig_nodes <- nodes %>% filter(shape!="pentagon")
+ig_nodes$label <- ifelse(ig_nodes$shape=="square",
+                         ig_nodes$label,
+                         ifelse(ig_nodes$size<11,
+                                NA,
+                                ig_nodes$label))
+
+ig_nodes <- ig_nodes %>% drop_na(label) %>% select(label)
+
+ig_edges<- edges_final %>% filter(edges_final$edges%in%ig_nodes$label)
+
+g1 <- graph_from_data_frame(d=ig_edges, vertices = ig_nodes)
+
+modularity_max <- as.data.frame(matrix(ncol=1, nrow=50))
+for (a in 1:50) {
+  modularity_max$V1[a]<-modularity(cluster_walktrap(g1, steps = a))
+  
+}
+
+c1 = cluster_walktrap(g1, steps = which.max(modularity_max$V1))
+modularity(c1)
+length(c1)
+sizes(c1)
+crossing(c1,g1)
+plot(c1,g1)
+plot_dendrogram(c1)
+group_membership <- as.data.frame(c1$membership) %>% 
+  rename(group='c1$membership')
+
+group_nodes <- nodes %>% filter(nodes$label%in%ig_nodes$label)
+group_nodes$group <- group_membership$group
+group_nodes <- group_nodes[order(group_nodes$group),]
+
+group_edges <- edges %>% filter(edges$to%in%group_nodes$id)
+
+visNetwork(nodes=group_nodes, edges = group_edges) %>% 
+  visLegend()
+
+#qualitative variable cleaning taken from paper 2 file####
+qual <- c("no_feed_use",
+          "feed_no_recomm",
+          "hay_benefits_yes",
+          "hay_making_no_recomm",
+          "vaccine_no_reason",
+          "vaccine_no_recomm",
+          "ai_recommend_no",
+          "hired_recommend_no")
+raw_field[qual] <- lapply(raw_field[qual], gsub, pattern=",", replacement=";")
+raw_field[qual] <- lapply(raw_field[qual], gsub, pattern="  ", replacement=" ")
+raw_field[qual] <- lapply(raw_field[qual], gsub, pattern=" and ", replacement=";")
+raw_field[qual] <- lapply(raw_field[qual], gsub, pattern=" ;", replacement=";")
+raw_field[qual] <- lapply(raw_field[qual], gsub, pattern="; ", replacement=";")
+
+raw_field <- raw_field %>% separate(no_feed_use, c("no_feed_use_1",
+                                                   "no_feed_use_2"), ";")
+raw_field <- raw_field %>% separate(hay_benefits_yes, c("hay_benefits_yes_1",
+                                                        "hay_benefits_yes_2"), ";")
+
+raw_field$no_feed_use_1 <- ifelse(str_detect(raw_field$no_feed_use_1, ("expens|cost|finance")),
+                                  "expensive", 
+                                  ifelse(str_detect(raw_field$no_feed_use_1, ("cow|free")),
+                                         "unimproved or free range cow/s",
+                                         ifelse(str_detect(raw_field$no_feed_use_1, ("idea|know")),
+                                                "lack of knowledge",
+                                                ifelse(str_detect(raw_field$no_feed_use_1, ("seed|available|do not have|don't have|doesn't have|don't own|don't produce|doesn't grow")),
+                                                       "no access to seed",
+                                                       ifelse(str_detect(raw_field$no_feed_use_1, ("land|size|space|small|limited|lznd")),
+                                                              "limited space", 
+                                                              ifelse(str_detect(raw_field$no_feed_use_1, "time"),
+                                                                     "not enough time",
+                                                                     "other"))))))
+
+
+raw_field$no_feed_use_2 <- ifelse(str_detect(raw_field$no_feed_use_2, ("expens|cost|finance")),
+                                  "expensive", 
+                                  ifelse(str_detect(raw_field$no_feed_use_2, ("cow|free")),
+                                         "unimproved or free range cow/s",
+                                         ifelse(str_detect(raw_field$no_feed_use_2, ("idea|know")),
+                                                "lack of knowledge",
+                                                ifelse(str_detect(raw_field$no_feed_use_2, ("seed|available")),
+                                                       "no access to seed",
+                                                       ifelse(str_detect(raw_field$no_feed_use_2, ("land|size|space|small|limited")),
+                                                              "limited space", 
+                                                              ifelse(str_detect(raw_field$no_feed_use_2, "time"),
+                                                                     "not enough time",
+                                                                     "other"))))))
+
+raw_field$feed_no_recomm <- ifelse(str_detect(raw_field$feed_no_recomm, ("expens|cost|finance")),
+                                   "expensive", 
+                                   ifelse(str_detect(raw_field$feed_no_recomm, ("cow|free")),
+                                          "unimproved or free range cow/s",
+                                          ifelse(str_detect(raw_field$feed_no_recomm, ("idea|know")),
+                                                 "lack of knowledge",
+                                                 ifelse(str_detect(raw_field$feed_no_recomm, ("seed|available")),
+                                                        "no access to seed",
+                                                        ifelse(str_detect(raw_field$feed_no_recomm, ("land|size|space|small|limited")),
+                                                               "limited space", 
+                                                               ifelse(str_detect(raw_field$feed_no_recomm, "time"),
+                                                                      "not enough time",
+                                                                      raw_field$feed_no_recomm))))))
+
+raw_field$hay_benefits_yes_1 <- ifelse(str_detect(raw_field$hay_benefits_yes_1, ("expens|cost|finance|capital|funds|sive")),
+                                       "expensive", 
+                                       ifelse(str_detect(raw_field$hay_benefits_yes_1, ("no enough|not enough|doesn't have enough|lack of enough|doesn't grow|do not have enough|no fodder|no feeds|resource|material")),
+                                              "no/too little fodder",
+                                              ifelse(str_detect(raw_field$hay_benefits_yes_1, ("know|skill|practice|aware|capacity|no idea|knwo")),
+                                                     "lack of knowledge",
+                                                     ifelse(str_detect(raw_field$hay_benefits_yes_1, "difficult|time|tedious|ectic"),
+                                                            "not enough time/too difficult",
+                                                            ifelse(str_detect(raw_field$hay_benefits_yes_1, ("small|room|space")),
+                                                                   "limited space", 
+                                                                   "other")))))
+
+raw_field$hay_benefits_yes_2 <- ifelse(str_detect(raw_field$hay_benefits_yes_2, ("financ|capital")),
+                                       "expensive",
+                                       ifelse(str_detect(raw_field$hay_benefits_yes_2, "difficult|time|tedious|ectic"),
+                                              "not enough time/too difficult",
+                                              "other "))
+
+
+raw_field$vaccine_no_reason<- ifelse(str_detect(raw_field$no_feed_use_2, ("idea")),
+                                     "lack of knowledge",
+                                     raw_field$vaccine_no_reason)
+#s####
 expanded_data %>% 
   select(county,
     feed_use, feed_aware,
