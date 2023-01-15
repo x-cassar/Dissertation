@@ -256,34 +256,38 @@ expanded_data<-expanded_data %>%
 #network mapping####
 library(visNetwork)
 
-test_nodes<-expanded_data %>% select(parti_name, person_1:person_4) %>% 
-  pivot_longer(cols = c(1:5),
-               names_to = "var",
-               values_to = "label") %>% 
-  select(2) %>%
-  filter(str_detect(label,"o")) %>% 
-  group_by(label) %>% 
-  count() %>% 
-  mutate(label=as.character(label)) %>% 
-  #mutate(label=ifelse((str_detect(label,"x")&n=="1"),NA, label)) %>% 
-  select(label) %>% 
-  drop_na(label) %>% 
-  arrange(label) %>%
-  mutate(id=label) %>% 
-  select(id,label) %>% 
-  mutate(color.background=ifelse(str_detect(label,"p"),"tomato","slategray"))
+for (county in c("o","r","s","v")) {
+  test_nodes<-expanded_data %>% select(parti_name, person_1:person_4) %>% 
+    pivot_longer(cols = c(1:5),
+                 names_to = "var",
+                 values_to = "label") %>% 
+    select(2) %>%
+    filter(str_detect(label,county)) %>% 
+    group_by(label) %>% 
+    count() %>% 
+    mutate(label=as.character(label)) %>% 
+    #mutate(label=ifelse((str_detect(label,"x")&n=="1"),NA, label)) %>% #turn this off to show all; on to eliminate non-participants mentioned once
+    select(label) %>% 
+    drop_na(label) %>% 
+    arrange(label) %>%
+    mutate(id=label) %>% 
+    select(id,label) %>% 
+    mutate(color.background=ifelse(str_detect(label,"p"),"tomato","slategray"))
   
+  
+  test_edges<-expanded_data %>% select(parti_name, person_1:person_4) %>% 
+    mutate_all(as.character) %>% 
+    pivot_longer(cols = c(2:5),
+                 names_to = "var",
+                 values_to = "to") %>% 
+    select(-var) %>% 
+    rename("from"=1) %>% 
+    filter(to%in%test_nodes$label)
+  
+  
+  visSave(visNetwork(test_nodes,test_edges),file=paste0(county, "_network_vis.html"))
+}
 
-test_edges<-expanded_data %>% select(parti_name, person_1:person_4) %>% 
-  mutate_all(as.character) %>% 
-  pivot_longer(cols = c(2:5),
-               names_to = "var",
-               values_to = "to") %>% 
-  select(-var) %>% 
-  rename("from"=1) %>% 
-  filter(to%in%test_nodes$label)
-
-visNetwork(test_nodes,test_edges)
 
 #qualitative variable cleaning taken from paper 2 file####
 qual <- c("no_feed_use",
