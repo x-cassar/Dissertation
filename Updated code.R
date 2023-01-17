@@ -171,6 +171,9 @@ expanded_data <- expanded_data %>%
 
 
 #other variables####
+##crossbreed use####
+expanded_data<-expanded_data %>% 
+  mutate(crossbreed_use=as.logical(ifelse(perc_crossbreed>0,T,F)))
 ##vaccine would be use####
 expanded_data<-expanded_data %>% 
   mutate(vaccine_wouldbe_use=as.logical(case_when(vaccine_use==1~1,
@@ -208,6 +211,18 @@ expanded_data<-expanded_data %>%
   mutate(hh_head_gender=case_when(decision_maker==1~parti_gender,
                                   decision_maker==0~decision_maker_gender))
 
+##education as continuous####
+expanded_data<-expanded_data %>% 
+  mutate(education_cont=case_when(education=="none"~1,
+                                  education=="none_read"~2,
+                                  education=="primary"~3,
+                                  education=="above_primary"~4))
+##farm size as continuous####
+expanded_data<-expanded_data %>% 
+  mutate(farm_size_cont=case_when(farm_size=="0_0.5"~1,
+                                  farm_size=="0.6_2.5"~2,
+                                  farm_size=="greater_2.6"~3,
+                                  TRUE~NA_real_))
 ##number of info sources####
 expanded_data<-expanded_data %>% 
   mutate(across(c(info_recieved_coop:info_recieved_newspaper), ~as.numeric(.x))) %>%
@@ -224,7 +239,8 @@ expanded_data<-expanded_data %>%
          #tech use
          vaccine_use, vaccine_wouldbe_use,
          feed_used, specific_feed_used,
-         breed_service_ai,
+         crossbreed_use,
+         breed_service_ai,breed_service_community,breed_service_own, breed_service_hired,
          #tech knowledge
          vaccine_aware,
          aware_feed_benefits, #issue w cooperative [2], g [247],
@@ -249,6 +265,7 @@ expanded_data<-expanded_data %>%
          everything()) %>% 
   rename(feed_use=feed_used,
          ai_use=breed_service_ai,
+         hired_use=breed_service_hired,
          feed_aware=aware_feed_benefits,
          crossbreed_aware=improv_breed,
          vaccine_recommend=vaccine_recomm)
@@ -384,20 +401,6 @@ field$feed_training_source <- as.factor(ifelse(str_detect(field$feed_training_so
                                                              as.character(field$feed_training_source)))))
 
 
-#s####
-expanded_data %>% 
-  select(county,
-    feed_use, feed_aware,
-         vaccine_use, vaccine_wouldbe_use, vaccine_aware,
-         ai_use, crossbreed_aware) %>%
-  group_by(county) %>% 
-  skim()
-
-summary(glm(family = binomial("logit"),
-            data = expanded_data,
-            crossbreed_aware~hh_head_gender+age+education+hh_depen+
-              farming_years+num_cows+con_personal+degree+village_relationship
-            ))
 
 #creation of social capital variable####
 social_capital<-expanded_data %>% 
