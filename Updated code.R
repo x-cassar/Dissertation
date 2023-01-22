@@ -257,6 +257,7 @@ expanded_data<-expanded_data %>%
          transport_market, market_distance,
          other_livestock, other_livestock_type,other_livestock_number,
          second_income_none, second_income_employment:second_income_other_farming,
+         mobile_access, elec_access, internet_access
          #network measures
          degree:eigen, cluster_parti,
          contains("info_source"),

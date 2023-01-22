@@ -101,6 +101,7 @@ summary(glm(data = mnq09_data_c %>%
               education_cont+
               farming_years+
               farm_size_cont+
+              mobile_access+#Kabebe et al., 2017 #beware of this - adoption rate is almost 100%, so be careful in implications of including this in regression. almost better off mentioning 100% and not including 
               elec_access+internet_access+#instead of household exp
               crossbreed_aware+#info constraint
               farmer_group+finance_group+social_groups+
@@ -128,6 +129,7 @@ summary(glm(data = mnq09_data_f %>%
               education_cont+
               farming_years+
               farm_size_cont+
+              mobile_access+#Kabebe et al., 2017
               elec_access+internet_access+#instead of household exp
               feed_aware+#info constraint
               farmer_group+finance_group+social_groups+
@@ -140,7 +142,9 @@ summary(glm(data = mnq09_data_f %>%
             #+info_recieved_ngo_proj+info_recieved_gov_proj
             #+count_info_recieved
             +use_rate*feed_aware #in line with varshney statement that those with less knowledge more liable to endogenous effects
-            +second_income_employment+second_income_labour #from ndah paper 
+            +second_income_employment+second_income_labour+crossbreed_use #from ndah paper
+            +betweenness #maina
+            +county
             ,
             family = binomial("logit")
 ))
@@ -156,6 +160,7 @@ summary(glm(data = mnq09_data_v %>%
               education_cont+
               farming_years+
               farm_size_cont+
+              #mobile_access+#Kabebe et al., 2017
               elec_access+internet_access+#instead of household exp
               vaccine_aware+#info constraint
               farmer_group+finance_group+social_groups+
